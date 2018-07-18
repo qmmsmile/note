@@ -1,0 +1,61 @@
+一、DDL操作
+
+    创建简单表
+    hive> CREATE TABLE pokes (foo INT, bar STRING);
+
+    复杂一下如下：
+    创建外部表：
+    CREATE EXTERNAL TABLE page_view(viewTime INT, userid BIGINT,
+         page_url STRING, referrer_url STRING,
+         ip STRING COMMENT 'IP Address of the User',
+         country STRING COMMENT 'country of origination')
+    COMMENT 'This is the staging page view table'
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY '\054'
+    STORED AS TEXTFILE
+    LOCATION '<hdfs_location>';
+
+    建分区表:
+    CREATE TABLE par_table(viewTime INT, userid BIGINT,
+         page_url STRING, referrer_url STRING,
+         ip STRING COMMENT 'IP Address of the User')
+    COMMENT 'This is the page view table'
+    PARTITIONED BY(date STRING, pos STRING)
+    ROW FORMAT DELIMITED ‘\t’
+       FIELDS TERMINATED BY '\n'
+    STORED AS SEQUENCEFILE;
+
+    建Bucket表
+    CREATE TABLE par_table(viewTime INT, userid BIGINT,
+         page_url STRING, referrer_url STRING,
+         ip STRING COMMENT 'IP Address of the User')
+    COMMENT 'This is the page view table'
+    PARTITIONED BY(date STRING, pos STRING)
+    CLUSTERED BY(userid) SORTED BY(viewTime) INTO 32 BUCKETS
+    ROW FORMAT DELIMITED ‘\t’
+       FIELDS TERMINATED BY '\n'
+    STORED AS SEQUENCEFILE;
+
+    创建表并创建索引字段ds
+    hive> CREATE TABLE invites (foo INT, bar STRING) PARTITIONED BY (ds STRING);
+
+    复制一个空表
+    CREATE TABLE empty_key_value_store
+    LIKE key_value_store;
+
+    例子
+    create table  user_info (user_id int, cid string, ckid string, username string)
+    row format delimited
+    fields terminated by '\t'
+    lines terminated by '\n';
+    导入数据表的数据格式是：字段之间是tab键分割，行之间是断行。
+    及要我们的文件内容格式：
+    100636  100890  c5c86f4cddc15eb7        yyyvybtvt
+    100612  100865  97cc70d411c18b6f        gyvcycy
+    100078  100087  ecd6026a15ffddf5        qa000100
+
+    显示所有表
+    hive> SHOW TABLES;
+    按正条件（正则表达式）显示表，
+    hive> SHOW TABLES '.*s';
+
+二、修改表结构
