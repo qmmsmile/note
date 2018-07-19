@@ -318,9 +318,6 @@
         •select * from dual a,dual b where a.key = b.key;
         •Hive中应为
         •select * from dual a join dual b on a.key = b.key;
-        而不是传统的格式：
-        SELECT t1.a1 as c1, t2.b1 as c2FROM t1, t2
-        WHERE t1.a2 = t2.b2
 
     2、分号字符
         •分号是SQL语句结束标记，在HiveQL中也是，但是在HiveQL中，对分号的识别没有那么智慧，例如：
@@ -357,8 +354,7 @@
 
         -DISTRIBUTE BY: 用于给reduce程序分配行数据
 
-    7、hive支持将转换后的数据直接写入不同的表，还能写入分区、hdfs和本地目录
-        这样能免除多次扫描输入表的开销。
+    7、hive支持将转换后的数据直接写入不同的表，还能写入分区、hdfs和本地目录这样能免除多次扫描输入表的开销。
         FROM t1
 
         INSERT OVERWRITE TABLE t2
