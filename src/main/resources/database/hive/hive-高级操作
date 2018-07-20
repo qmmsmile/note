@@ -219,3 +219,89 @@
             > select id, name, tel
             > from wyp;
         数据就插入到test4表中去了，CTAS操作是原子的，因此如果select查询由于某种原因而失败，新表是不会创建的！
+
+四、Hive数据导出三种方式
+
+    1、导出到本地文件系统。
+    2、导出到HDFS中；
+    3、导出到Hive的还有一个表中。
+
+    1、导出到本地文件系统
+        hive> insert overwrite local directory '/home/wyp/wyp'
+            > select * from wyp;
+        这条HQL的执行须要启用Mapreduce完毕，执行完这条语句之后，将会在本地文件系统的/home/wyp/wyp文件夹下生成文件，这个文件是Reduce产生的结果（这里生成的文件名称是000000_0）。
+
+    2、导出到HDFS中
+        和导入数据到本地文件系统一样的简单，能够用以下的语句实现：
+        hive> insert overwrite directory '/home/wyp/hdfs'
+            > select * from wyp;
+          将会在HDFS的/home/wyp/hdfs文件夹下保存导出来的数据。
+          注意，和导出文件到本地文件系统的HQL少一个local，数据的存放路径就不一样了。
+
+    3、导出到Hive的还有一个表中
+
+      hive> insert into table test
+          > partition (age='25')
+          > select id, name, tel
+          > from wyp;
+
+五、Hive如何创建索引
+
+    1、索引的作用
+      Hive支持索引，但是Hive的索引与关系型数据库中的索引并不相同，比如，Hive不支持主键或者外键。
+
+      Hive索引可以建立在表中的某些列上，以提升一些操作的效率，例如减少MapReduce任务中需要读取的数据块的数量。
+
+      在可以预见到分区数据非常庞大的情况下，索引常常是优于分区的。
+
+      虽然Hive并不像事物数据库那样针对个别的行来执行查询、更新、删除等操作。它更多的用在多任务节点的场景下，快速地全表扫描大规模数据。
+      但是在某些场景下，建立索引还是可以提高Hive表指定列的查询速度。（虽然效果差强人意）
+
+    2、索引适用的场景
+      适用于不更新的静态字段。以免总是重建索引数据。每次建立、更新数据后，都要重建索引以构建索引表。
+
+      Hive索引的机制如下：
+
+      hive在指定列上建立索引，会产生一张索引表（Hive的一张物理表），里面的字段包括，索引列的值、该值对应的HDFS文件路径、该值在文件中的偏移量;
+
+      v0.8后引入bitmap索引处理器，这个处理器适用于排重后，值较少的列（例如，某字段的取值只可能是几个枚举值）
+
+      因为索引是用空间换时间，索引列的取值过多会导致建立bitmap索引表过大。
+
+      但是，很少遇到hive用索引的。说明还是有缺陷or不合适的地方的。
+
+    3、索引的建立与使用
+      语法如下：
+
+      CREATE INDEX index_name
+      ON TABLE base_table_name (col_name, ...)
+      AS 'index.handler.class.name'
+      [WITH DEFERRED REBUILD]
+      [IDXPROPERTIES (property_name=property_value, ...)]
+      [IN TABLE index_table_name]
+      [PARTITIONED BY (col_name, ...)]
+      [
+         [ ROW FORMAT ...] STORED AS ...
+         | STORED BY ...
+      ]
+      [LOCATION hdfs_path]
+      [TBLPROPERTIES (...)]
+      [COMMENT "index comment"]
+      AS ...语句指定了 索引处理器，也就是一个实现了索引接口的Java类。
+
+      建立完索引之后 需要重建索引数据，会触发一个mr job
+
+      ALTER INDEX employee_index
+      ON TABLE employee
+      PARTITION (country = 'US')
+      REBUILD;
+      建立完可以通过显示命令显示索引
+
+      SHOW FORMATTED INDEX ON employees;
+      想要索引在查询时，生效，还得设置使用索引：默认是不使用的。
+
+      SET hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+      SET hive.optimize.index.filter=true;
+      SET hive.optimize.index.filter.compact.minsize=0;
+      最后，删除索引的语法如下：
+      DROP INDEX IF EXISTS employees_index ON TABLE employees;

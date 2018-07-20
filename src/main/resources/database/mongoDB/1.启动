@@ -1,0 +1,7 @@
+启动mongodb数据库服务
+
+1.首先打开dos窗口，然后选择路径到你的安装路径下的bin目录（我的路径是的D:\MongoDB\bin）
+
+2.然后输入启动命令 mongod.exe --dbpath=D:\MongoDB\data\db
+
+3．回车dos界面出现 27017 的字样说明服务启动成功了如图所示
