@@ -1,0 +1,12 @@
+连接：mysql -u  xxxxxxx  -h xxxxxx -p
+	  mysql -u “用户名” -h “host” -p   >回车输入密码
+
+显示数据库：show databases;
+
+创建数据库：create database name;
+选择数据库：use databasename;
+直接删除数据库，不提醒：drop database name;
+
+显示表：show tables;
+
+表的详细描述:describe tablename;

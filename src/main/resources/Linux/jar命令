@@ -1,0 +1,10 @@
+ps aux|grep xxxxxx.jar || jps
+kill -9 pid
+rm -f xxxxxx.jar
+nohup sh run.sh > logs/run20180313.log 2>&1 &  OR nohup java -jar xxxx.jar > logs/run20180313.log 2>&1 &
+
+run.sh
+JAVA=/usr/lib/jvm/jre/bin/java
+DIR=/home/springboot/neo-java/
+cd $DIR
+$JAVA -Xmx2048m -XX:MaxMetaspaceSize=2048m -XX:-UseGCOverheadLimit -jar $DIR/xxxxx.jar

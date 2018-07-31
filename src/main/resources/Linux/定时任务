@@ -1,0 +1,43 @@
+linux 系统则是由cron(crond)这个系统服务来控制的。Linux系统上面原本就有非常多的计划性工作，因此这个系统服务是默认启动的。
+另外,由于使用者自己也可以设置计划任务，所以，Linux系统也提供了使用者控制计划任务的命令:crontab 命令。
+
+系统任务调度：系统周期性所要执行的工作，比如写缓存数据到硬盘、日志清理等。在/etc目录下有一个crontab文件，这个就是系统任务调度的配置文件。
+
+    /etc/crontab文件包括下面几行：
+    cat /etc/crontab
+    SHELL=/bin/bash
+    PATH=/sbin:/bin:/usr/sbin:/usr/bin
+    MAILTO=HOME=/
+    # run-parts
+    51 * * * * root run-parts /etc/cron.hourly
+    24 7 * * * root run-parts /etc/cron.daily
+    22 4 * * 0 root run-parts /etc/cron.weekly
+    42 4 1 * * root run-parts /etc/cron.monthly
+
+    用户所建立的crontab文件中，每一行都代表一项任务，每行的每个字段代表一项设置，它的格式共分为六个字段，前五段是时间设定段，第六段是要执行的命令段，格式如下：
+    minute hour day month week command
+    其中：
+    minute： 表示分钟，可以是从0到59之间的任何整数。
+    hour：表示小时，可以是从0到23之间的任何整数。
+    day：表示日期，可以是从1到31之间的任何整数。
+    month：表示月份，可以是从1到12之间的任何整数。
+    week：表示星期几，可以是从0到7之间的任何整数，这里的0或7代表星期日。
+    command：要执行的命令，可以是系统命令，也可以是自己编写的脚本文件。
+
+    在以上各个字段中，还可以使用以下特殊字符：
+    星号（*）：代表所有可能的值，例如month字段如果是星号，则表示在满足其它字段的制约条件后每月都执行该命令操作。
+    逗号（,）：可以用逗号隔开的值指定一个列表范围，例如，“1,2,5,7,8,9”
+    中杠（-）：可以用整数之间的中杠表示一个整数范围，例如“2-6”表示“2,3,4,5,6”
+    正斜线（/）：可以用正斜线指定时间的间隔频率，例如“0-23/2”表示每两小时执行一次。同时正斜线可以和星号一起使用，例如*/10，如果用在minute字段，表示每十分钟执行一次。
+
+1、crontab服务的启动关闭
+    sbin/service crond start //启动服务
+    /sbin/service crond stop //关闭服务
+    /sbin/service crond restart //重启服务
+    /sbin/service crond reload //重新载入配置
+
+2、命令
+    crontab -u //设定某个用户的cron服务，一般root用户在执行这个命令的时候需要此参数
+    crontab -l //列出某个用户cron服务的详细内容
+    crontab -r //删除某个用户的cron服务
+    crontab -e //编辑某个用户的cron服务
