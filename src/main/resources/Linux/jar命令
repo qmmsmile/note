@@ -2,6 +2,7 @@ ps aux|grep xxxxxx.jar || jps
 kill -9 pid
 rm -f xxxxxx.jar
 nohup sh run.sh > logs/run20180313.log 2>&1 &  OR nohup java -jar xxxx.jar > logs/run20180313.log 2>&1 &
+tailf logs/run20180101.log
 
 run.sh
 JAVA=/usr/lib/jvm/jre/bin/java
