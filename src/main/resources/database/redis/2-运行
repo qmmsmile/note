@@ -1,0 +1,11 @@
+打开一个cmd窗口使用cd命令切换目录到 D:\Redis\Redis-x64-3.2.100 运行 redis-server.exe redis.windows.conf。
+
+Redis 客户端的基本语法为：$ redis-cli
+启动 redis客户端：打开终端切换目录到 D:\Redis\Redis-x64-3.2.100，并输入命令 redis-cli。该命令会连接本地的redis服务
+
+redis 127.0.0.1:6379> PING
+PONG
+
+在远程服务上执行命令：$ redis-cli -h host -p port -a password
+
+有时候会有中文乱码。要在 redis-cli 后面加上 --raw，redis-cli --raw，就可以避免中文乱码了。
