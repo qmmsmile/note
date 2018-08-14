@@ -1,0 +1,609 @@
+一、创建表
+    1.命令
+        可以使用命令创建一个表，在这里必须指定表名和列族名。在HBase shell中创建表的语法如下所示。
+        create ‘<table name>’,’<column family>’
+
+        示例
+        一个表名为emp的样本模式。它有两个列族：“personal data”和“professional data”。
+        hbase(main):002:0> create 'emp', 'personal data', 'professional data'
+
+        验证创建
+        可以验证是否已经创建，使用 list 命令如下所示。在这里，可以看到创建的emp表。
+        hbase(main):002:0> list
+        TABLE
+        emp
+        2 row(s) in 0.0340 seconds
+
+    2.使用Java API创建一个表
+        可以使用HBaseAdmin类的createTable()方法创建表在HBase中。这个类属于org.apache.hadoop.hbase.client包。下面给出的步骤是来使用Java API创建表在HBase中。
+
+        第1步：实例化HBaseAdmin
+        这个类需要配置对象作为参数，因此初始实例配置类传递此实例给HBaseAdmin。
+        Configuration conf = HBaseConfiguration.create();
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步：创建TableDescriptor
+        HTableDescriptor类是属于org.apache.hadoop.hbase。这个类就像表名和列族的容器一样。
+        //creating table descriptor
+        HTableDescriptor table = new HTableDescriptor(toBytes("Table name"));
+        //creating column family descriptor
+        HColumnDescriptor family = new HColumnDescriptor(toBytes("column family"));
+        //adding coloumn family to HTable
+        table.addFamily(family);
+
+        第3步：通过执行管理
+        使用HBaseAdmin类的createTable()方法，可以在管理模式执行创建的表。
+        admin.createTable(table);
+
+        下面给出的是完整的程序，通过管理员创建一个表。
+        import java.io.IOException;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.HColumnDescriptor;
+        import org.apache.hadoop.hbase.HTableDescriptor;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        import org.apache.hadoop.hbase.TableName;
+        import org.apache.hadoop.conf.Configuration;
+
+        public class CreateTable {
+
+           public static void main(String[] args) throws IOException {
+
+           // Instantiating configuration class
+           Configuration con = HBaseConfiguration.create();
+
+           // Instantiating HbaseAdmin class
+           HBaseAdmin admin = new HBaseAdmin(con);
+
+           // Instantiating table descriptor class
+           HTableDescriptor tableDescriptor = new TableDescriptor(TableName.valueOf("emp"));
+
+           // Adding column families to table descriptor
+           tableDescriptor.addFamily(new HColumnDescriptor("personal"));
+           tableDescriptor.addFamily(new HColumnDescriptor("professional"));
+
+           // Execute the table through admin
+           admin.createTable(tableDescriptor);
+           System.out.println(" Table created ");
+           }
+          }
+        编译和执行上述程序如下所示。
+        $javac CreateTable.java
+        $java CreateTable
+        下面列出的是输出：
+        Table created
+
+二、列出表
+    1.命令
+        list是用来列出HBase中所有表的命令。
+        当输入这个命令，并在HBase提示符下执行，它会显示HBase中的所有表的列表，如下图所示。
+        hbase(main):001:0> list
+        TABLE
+        emp
+        在这里，可以看到一个名为表emp。
+
+    2.使用Java API列出表
+        按照下面给出的步骤来使用Java API从HBase获得表的列表。
+
+        第1步
+        在类HBaseAdmin中有一个方法叫 listTables()，列出HBase中所有的表的列表。这个方法返回HTableDescriptor对象的数组。
+        //creating a configuration object
+        Configuration conf = HBaseConfiguration.create();
+
+        //Creating HBaseAdmin object
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        //Getting all the list of tables using HBaseAdmin object
+        HTableDescriptor[] tableDescriptor =admin.listTables();
+        就可以得到使用HTableDescriptor类长度可变的HTableDescriptor[]数组的长度。从该对象使用getNameAsString()方法获得表的名称。运行'for'循环而获得HBase表的列表。
+
+        下面给出的是使用Java API程序列出所有HBase中表的列表。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.HTableDescriptor;
+        import org.apache.hadoop.hbase.MasterNotRunningException;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+
+        public class ListTables {
+
+           public static void main(String args[])throws MasterNotRunningException, IOException{
+
+           // Instantiating a configuration class
+           Configuration conf = HBaseConfiguration.create();
+
+           // Instantiating HBaseAdmin class
+           HBaseAdmin admin = new HBaseAdmin(conf);
+
+           // Getting all the list of tables using HBaseAdmin object
+           HTableDescriptor[] tableDescriptor =admin.listTables();
+
+           // printing all the table names.
+           for (int i=0; i<tableDescriptor.length;i++ ){
+              System.out.println(tableDescriptor[i].getNameAsString());
+           }
+           }
+         }
+        编译和执行上述程序如下所示。
+        $javac ListTables.java
+        $java ListTables
+        下面列出的是输出：
+        User
+        emp
+
+三、禁用表
+    1.命令
+        要删除表或改变其设置，首先需要使用disable命令关闭表。使用enable命令，可以重新启用它。
+
+        下面给出的语法是用来禁用一个表： disable ‘emp’
+
+        下面给出的是一个例子，说明如何禁用表。
+        hbase(main):025:0> disable 'emp'
+        0 row(s) in 1.2760 seconds
+
+        验证
+        禁用表之后，仍然可以通过list和exists命令查看到。无法扫描到它存在，它会给下面的错误。
+        hbase(main):028:0> scan 'emp'
+        ROW         COLUMN+CELL
+        ERROR: emp is disabled.
+
+        is_disabled
+        这个命令是用来查看表是否被禁用。它的语法如下。
+        hbase> is_disabled 'table name'
+        下面的例子验证表名为emp是否被禁用。如果禁用，它会返回true，如果没有，它会返回false。
+        hbase(main):031:0> is_disabled 'emp'
+        true
+        0 row(s) in 0.0440 seconds
+
+        disable_all
+        此命令用于禁用所有匹配给定正则表达式的表。disable_all命令的语法如下。
+        hbase> disable_all 'r.*'
+        假设有5个表在HBase，即raja, rajani, rajendra, rajesh 和 raju。下面的代码将禁用所有以 raj 开始的表。
+        hbase(main):002:0> disable_all 'raj.*'
+        raja
+        rajani
+        rajendra
+        rajesh
+        raju
+        Disable the above 5 tables (y/n)?
+        y
+        5 tables successfully disabled
+
+    2.禁用表使用Java API
+        要验证一个表是否被禁用，使用isTableDisabled()方法和disableTable()方法禁用一个表。这些方法属于HBaseAdmin类。按照下面给出禁用表中的步骤。
+
+        第1步
+        HBaseAdmin类的实例如下所示。
+        // Creating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Creating HBaseAdmin object
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用isTableDisabled()方法验证表是否被禁用
+        Boolean b = admin.isTableDisabled("emp");
+
+        第3步
+        如果表未禁用，禁用它，如下图所示。
+        if(!b){
+           admin.disableTable("emp");
+           System.out.println("Table disabled");
+        }
+        下面给出的是完整的程序，以验证表是否被禁用;如果没有，那么如何禁用它？
+
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.MasterNotRunningException;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+
+        public class DisableTable{
+
+           public static void main(String args[]) throws MasterNotRunningException, IOException{
+
+           // Instantiating configuration class
+           Configuration conf = HBaseConfiguration.create();
+
+           // Instantiating HBaseAdmin class
+           HBaseAdmin admin = new HBaseAdmin(conf);
+
+           // Verifying weather the table is disabled
+           Boolean bool = admin.isTableDisabled("emp");
+           System.out.println(bool);
+
+           // Disabling the table using HBaseAdmin object
+           if(!bool){
+              admin.disableTable("emp");
+              System.out.println("Table disabled");
+           }
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac DisableTable.java
+        $java DsiableTable
+        下面列出的是输出：
+        false
+        Table disabled
+
+四、启用表
+    1.命令
+        启用表的语法：enable ‘emp’
+        给出下面是一个例子，使一个表启用。
+        hbase(main):005:0> enable 'emp'
+        0 row(s) in 0.4580 seconds
+
+        验证
+        启用表之后，扫描。如果能看到的模式，那么证明表已成功启用。
+        hbase(main):006:0> scan 'emp'
+
+        is_enabled
+        此命令用于查找表是否被启用。它的语法如下：
+        hbase> is_enabled 'table name'
+        下面的代码验证表emp是否启用。如果启用，它将返回true，如果没有，它会返回false。
+        hbase(main):031:0> is_enabled 'emp'
+        true
+        0 row(s) in 0.0440 seconds
+
+    2.使用Java API启用表
+        要验证一个表是否被启用，使用isTableEnabled()方法;并且使用enableTable()方法使一个表启用。这些方法属于HBaseAdmin类。按照下面给出启用表的步骤。
+
+        第1步
+        HBaseAdmin类的实例如下所示。
+        // Creating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Creating HBaseAdmin object
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用isTableEnabled()方法验证表是否被启用，如下所示。
+        Boolean bool=admin.isTableEnabled("emp");
+
+        第3步
+        如果表未禁用，那么禁用它，如下图所示
+         if(!bool){
+           admin.enableTable("emp");
+           System.out.println("Table enabled");
+        }
+
+        下面给出的是完整的程序，以验证表是否已启用，如果它不是，那么启用它。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.MasterNotRunningException;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+
+        public class EnableTable{
+
+           public static void main(String args[]) throws MasterNotRunningException, IOException{
+
+           // Instantiating configuration class
+           Configuration conf = HBaseConfiguration.create();
+
+           // Instantiating HBaseAdmin class
+           HBaseAdmin admin = new HBaseAdmin(conf);
+
+           // Verifying weather the table is disabled
+           Boolean bool = admin.isTableEnabled("emp");
+           System.out.println(bool);
+
+           // Disabling the table using HBaseAdmin object
+           if(!bool){
+              admin.enableTable("emp");
+              System.out.println("Table Enabled");
+           }
+           }
+        }
+
+        编译和执行上述程序如下所示。
+        $javac EnableTable.java
+        $java EnableTable
+        下面列出的是输出：
+        false
+        Table Enabled
+
+五、表描述和修改
+    1.描述
+        该命令返回表的说明。它的语法如下：
+        hbase> describe 'table name'
+    2.修改
+        (1)命令
+        alter用于更改现有表的命令。使用此命令可以更改列族的单元，设定最大数量和删除表范围运算符，并从表中删除列家族。
+
+        更改列族单元格的最大数目：
+            下面给出的语法来改变列家族单元的最大数目。
+            hbase> alter 't1', NAME => 'f1', VERSIONS => 5
+            在下面的例子中，单元的最大数目设置为5。
+            hbase(main):003:0> alter 'emp', NAME => 'personal data', VERSIONS => 5
+
+        表范围运算符：
+            使用alter，可以设置和删除表范围，运算符，如MAX_FILESIZE，READONLY，MEMSTORE_FLUSHSIZE，DEFERRED_LOG_FLUSH等。
+
+        设置只读：
+            下面给出的是语法，是用以设置表为只读。
+            hbase>alter 't1', READONLY(option)
+            在下面的例子中，我们已经设置表emp为只读。
+            hbase(main):006:0> alter 'emp', READONLY
+
+        删除表范围运算符：
+            也可以删除表范围运算。下面给出的是语法，从emp表中删除“MAX_FILESIZE”。
+            hbase> alter 't1', METHOD => 'table_att_unset', NAME => 'MAX_FILESIZE'
+
+        删除列族：
+            使用alter，也可以删除列族。下面给出的是使用alter删除列族的语法。
+            hbase> alter ‘ table name ’, ‘delete’ => ‘ column family ’
+            下面给出的是一个例子，从“emp”表中删除列族。
+            假设在HBase中有一个employee表。它包含以下数据：
+            hbase(main):006:0> scan 'employee'
+                     ROW                   COLUMN+CELL
+            row1 column=personal:city, timestamp=1418193767, value=hyderabad
+            row1 column=personal:name, timestamp=1418193806767, value=raju
+            row1 column=professional:designation, timestamp=1418193767, value=manager
+            row1 column=professional:salary, timestamp=1418193806767, value=50000
+            1 row(s) in 0.0160 seconds
+
+            现在使用alter命令删除指定的 professional 列族。
+            hbase(main):007:0> alter 'employee','delete'=>'professional'
+            Updating all regions with the new schema...
+            0/1 regions updated.
+            1/1 regions updated.
+            Done.
+            0 row(s) in 2.2380 seconds
+
+        （2）使用Java API添加一列族
+        可以使用HBAseAdmin类的addColumn方法添加一列家族的表。按照下面给出的步骤将一个列族添加到表中。
+
+        第1步
+        实例化HBaseAdmin类。
+        // Instantiating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Instantiating HBaseAdmin class
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        addColumn()方法需要一个表名和一个HColumnDescriptorclass对象。因此需要实例化HColumnDescriptor类。 HColumnDescriptor依次构造函数需要一个列族名称用于添加。在这里加入了一个名为“contactDetails”到“employee”表的列族。
+         // Instantiating columnDescriptor object
+        HColumnDescriptor columnDescriptor = new HColumnDescriptor("contactDetails");
+
+        第3步
+        使用addColumn方法添加列族。通过表名和HColumnDescriptor类对象作为这个方法的参数。
+        // Adding column family
+        admin.addColumn("employee", new HColumnDescriptor("columnDescriptor"));
+
+        下面给出的是一个完整的程序，用于添加一列族到现有的表。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.HColumnDescriptor;
+        import org.apache.hadoop.hbase.MasterNotRunningException;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        public class AddColoumn{
+
+           public static void main(String args[]) throws MasterNotRunningException, IOException{
+
+              // Instantiating configuration class.
+              Configuration conf = HBaseConfiguration.create();
+
+              // Instantiating HBaseAdmin class.
+              HBaseAdmin admin = new HBaseAdmin(conf);
+
+              // Instantiating columnDescriptor class
+              HColumnDescriptor columnDescriptor = new HColumnDescriptor("contactDetails");
+
+              // Adding column family
+              admin.addColumn("employee", columnDescriptor);
+              System.out.println("coloumn added");
+           }
+        }
+        编译和执行上述程序，如下所示
+        $javac AddColumn.java
+        $java AddColumn
+
+        上述编译只有已经设置“.bashrc”中的类路径。如果还没有，请按照下面编译给出.java文件的程序。
+        $javac -cp /home/hadoop/hbase/lib/*: Demo.java
+        如果一切顺利，它会生成以下的输出：
+         column added
+
+        （3）使用Java API删除列族
+        可以使用HBAseAdmin类的deleteColumn()方法删除列族。按照下面给出的步骤添加一个列族到表中。
+        第1步
+        实例化HBaseAdmin类。
+        // Instantiating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Instantiating HBaseAdmin class
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用deleteColumn()方法添加列族。传递表名和列族名作为这个方法的参数。
+        // Deleting column family
+        admin.deleteColumn("employee", "contactDetails");
+
+        下面给出的是从现有表中删除列族的完整的程序。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.MasterNotRunningException;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        public class DeleteColoumn{
+
+           public static void main(String args[]) throws MasterNotRunningException, IOException{
+
+              // Instantiating configuration class.
+              Configuration conf = HBaseConfiguration.create();
+
+              // Instantiating HBaseAdmin class.
+              HBaseAdmin admin = new HBaseAdmin(conf);
+
+              // Deleting a column family
+              admin.deleteColumn("employee","contactDetails");
+              System.out.println("coloumn deleted");
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac DeleteColumn.java
+        $java DeleteColumn
+        下面列出的是输出：
+        column deleted
+
+六、Exists
+    1.命令
+        可以使用exists命令验证表的存在。下面的示例演示了如何使用这个命令。
+        hbase(main):024:0> exists 'emp'
+        Table emp does exist
+        0 row(s) in 0.0750 seconds
+
+    2.使用Java API验证表的存在
+        可以使用HBaseAdmin类的tableExists()方法验证表在HBase中是否存在。按照下面给出的步骤验证HBase表存在。
+        第1步
+        Instantiate the HBaseAdimn class
+        // Instantiating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Instantiating HBaseAdmin class
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用tableExists()方法来验证表的存在。
+
+        下面给出的是使用java程序中的Java API来测试一个HBase表的存在。
+        import java.io.IOException;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        public class TableExists{
+
+           public static void main(String args[])throws IOException{
+
+           // Instantiating configuration class
+           Configuration conf = HBaseConfiguration.create();
+
+           // Instantiating HBaseAdmin class
+           HBaseAdmin admin = new HBaseAdmin(conf);
+
+           // Verifying the existance of the table
+           boolean bool = admin.tableExists("emp");
+           System.out.println( bool);
+           }
+        }
+        编译和执行上述程序如下所示。
+         $javac TableExists.java
+        $java TableExists
+        下面列出的是输出：
+        true
+
+七、删除表
+    1.命令
+        用drop命令可以删除表。在删除一个表之前必须先将其禁用。
+        hbase(main):018:0> disable 'emp'
+        0 row(s) in 1.4580 seconds
+
+        hbase(main):019:0> drop 'emp'
+        0 row(s) in 0.3060 seconds
+        使用exists 命令验证表是否被删除。
+
+        hbase(main):020:0> exists 'emp'
+        Table emp does not exist
+        0 row(s) in 0.0730 seconds
+
+        drop_all
+        这个命令是用来在给出删除匹配“regex”表。它的语法如下：
+        hbase> drop_all ‘t.*’
+        注意：要删除表，则必须先将其禁用。
+
+        示例：
+        所有这些表以字母raj开始。首先使用disable_all命令禁用所有这些表如下所示。
+        hbase(main):002:0> disable_all 'raj.*'
+        现在，可以使用 drop_all 命令删除它们，如下所示。
+        hbase(main):018:0> drop_all 'raj.*'
+
+    2.使用Java API删除表
+        可以使用 HBaseAdmin 类的deleteTable()方法删除表。按照下面给出是使用Java API来删除表中的步骤。
+        第1步
+        实例化HBaseAdmin类。
+        // creating a configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Creating HBaseAdmin object
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用HBaseAdmin类的disableTable()方法禁止表。
+        admin.disableTable("emp1");
+
+        第3步
+        现在使用HBaseAdmin类的deleteTable()方法删除表。
+        admin.deleteTable("emp12");
+
+        下面给出的是完整的Java程序用于删除HBase表。
+        import java.io.IOException;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        public class DeleteTable {
+
+           public static void main(String[] args) throws IOException {
+
+              // Instantiating configuration class
+              Configuration conf = HBaseConfiguration.create();
+
+              // Instantiating HBaseAdmin class
+              HBaseAdmin admin = new HBaseAdmin(conf);
+
+              // disabling table named emp
+              admin.disableTable("emp12");
+
+              // Deleting emp
+              admin.deleteTable("emp12");
+              System.out.println("Table deleted");
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac DeleteTable.java
+        $java DeleteTable
+        下面是输出结果：
+        Table deleted
+
+八、exit
+    1.命令
+        可以通过键入exit命令退出shell。
+        hbase(main):021:0> exit
+
+        停止HBase
+        要停止HBase，浏览进入到HBase主文件夹，然后键入以下命令。
+        ./bin/stop-hbase.sh
+
+    2.使用Java API停止HBase
+        可以使用HBaseAdmin类的shutdown()方法关闭HBase。按照下面给出关闭HBase的步骤：
+        第1步
+        实例化HbaseAdmin类。
+        // Instantiating configuration object
+        Configuration conf = HBaseConfiguration.create();
+        // Instantiating HBaseAdmin object
+        HBaseAdmin admin = new HBaseAdmin(conf);
+
+        第2步
+        使用HBaseAdmin类的shutdown()方法关闭HBase。
+        admin.shutdown();
+
+        下面给出的是停止HBase的程序。
+        import java.io.IOException;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.client.HBaseAdmin;
+        public class ShutDownHbase{
+
+         public static void main(String args[])throws IOException {
+
+            // Instantiating configuration class
+            Configuration conf = HBaseConfiguration.create();
+
+            // Instantiating HBaseAdmin class
+            HBaseAdmin admin = new HBaseAdmin(conf);
+
+            // Shutting down HBase
+            System.out.println("Shutting down hbase");
+            admin.shutdown();
+         }
+        }
+        编译和执行上述程序如下所示。
+        $javac ShutDownHbase.java
+        $java ShutDownHbase
+        下面是输出结果：
+        Shutting down hbase
+

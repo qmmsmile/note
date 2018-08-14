@@ -1,0 +1,436 @@
+一、创建数据
+    1.命令
+        put 命令,
+        add() - Put类的方法
+        put() - HTable 类的方法.
+
+        使用put命令，可以插入行到一个表。它的语法如下：
+        put ’<table name>’,’row1’,’<colfamily:colname>’,’<value>’
+        示例插入第一行
+        hbase(main):005:0> put 'emp','1','personal data:name','raju'
+        0 row(s) in 0.6600 seconds
+        hbase(main):006:0> put 'emp','1','personal data:city','hyderabad'
+        0 row(s) in 0.0410 seconds
+        hbase(main):007:0> put 'emp','1','professional data:designation','manager'
+        0 row(s) in 0.0240 seconds
+        hbase(main):007:0> put 'emp','1','professional data:salary','50000'
+        0 row(s) in 0.0240 seconds
+
+        hbase(main):022:0> scan 'emp'
+           ROW                        COLUMN+CELL
+        1 column=personal data:city, timestamp=1417524216501, value=hyderabad
+        1 column=personal data:name, timestamp=1417524185058, value=ramu
+        1 column=professional data:designation, timestamp=1417524232601, value=manager
+        1 column=professional data:salary, timestamp=1417524244109, value=50000
+
+    2.使用Java API插入数据
+        可以使用Put类的add()方法将数据插入到HBase。可以使用HTable类的put()方法保存数据。这些类属于org.apache.hadoop.hbase.client包。下面给出的步骤是在一个HBase表创建数据。
+
+        第1步：实例化配置类
+        Configuration类增加了HBase配置文件到它的对象。使用HbaseConfiguration类的create()方法。
+        Configuration conf = HbaseConfiguration.create();
+
+        第2步：实例化HTable类
+        有一类名为HTable，在HBase中实现了Table。这个类用于单个HBase表进行通信。在这个类实例接受配置对象和表名作为参数。可以实例HTable类。
+        HTable hTable = new HTable(conf, tableName);
+
+        第3步：实例化Put类
+        为了将数据插入到HBase表中，需要使用add()方法和变体。这种方法属于Put类，因此实例化Put类。这个类必须要以字符串格式的列名插入数据。可以实例Put类。
+        Put p = new Put(Bytes.toBytes("row1"));
+
+        第4步：插入数据
+        Put类的add()方法用于插入数据。它需要代表列族，分别为：列限定符（列名称）3字节阵列，以及要插入的值。使用add()方法将数据插入HBase表。
+        p.add(Bytes.toBytes("coloumn family "), Bytes.toBytes("column name"),Bytes.toBytes("value"));
+
+        第5步：保存数据到表中
+        插入所需的行后，HTable类put实例的put()方法添加，如下所示保存更改。
+        hTable.put(p);
+
+        第6步：关闭HTable实例
+        创建在HBase的表数据之后，使用close()方法，如下所示关闭HTable实例。
+        hTable.close();
+
+        下面给出的是在HBase的表创建数据的完整程序。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.client.HTable;
+        import org.apache.hadoop.hbase.client.Put;
+        import org.apache.hadoop.hbase.util.Bytes;
+        public class InsertData{
+
+           public static void main(String[] args) throws IOException {
+
+              // Instantiating Configuration class
+              Configuration config = HBaseConfiguration.create();
+
+              // Instantiating HTable class
+              HTable hTable = new HTable(config, "emp");
+
+              // Instantiating Put class
+              // accepts a row name.
+              Put p = new Put(Bytes.toBytes("row1"));
+
+              // adding values using add() method
+              // accepts column family name, qualifier/row name ,value
+              p.add(Bytes.toBytes("personal"),Bytes.toBytes("name"),Bytes.toBytes("raju"));
+
+              p.add(Bytes.toBytes("personal"),Bytes.toBytes("city"),Bytes.toBytes("hyderabad"));
+
+              p.add(Bytes.toBytes("professional"),Bytes.toBytes("designation"),Bytes.toBytes("manager"));
+
+              p.add(Bytes.toBytes("professional"),Bytes.toBytes("salary"),Bytes.toBytes("50000"));
+
+              // Saving the put Instance to the HTable.
+              hTable.put(p);
+              System.out.println("data inserted");
+
+              // closing HTable
+              hTable.close();
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac InsertData.java
+        $java InsertData
+        下面列出的是输出结果：
+        data inserted
+
+二、更新数据
+    1.命令
+        可以使用put命令更新现有的单元格值。按照下面的语法，并注明新值。
+        put ‘table name’,’row ’,'Column family:column name',’new value’
+        新给定值替换现有的值，并更新该行。
+
+        示例：
+        假设HBase中有一个表emp拥有下列数据
+        hbase(main):003:0> scan 'emp'
+         ROW              COLUMN+CELL
+        row1 column=personal:name, timestamp=1418051555, value=raju
+        row1 column=personal:city, timestamp=1418275907, value=Hyderabad
+        row1 column=professional:designation, timestamp=14180555,value=manager
+        row1 column=professional:salary, timestamp=1418035791555,value=50000
+        1 row(s) in 0.0100 seconds
+        以下命令将更新名为“Raju'员工的城市值为'Delhi'。
+        hbase(main):002:0> put 'emp','row1','personal:city','Delhi'
+        0 row(s) in 0.0400 seconds
+
+    2.使用Java API更新数据
+        使用put()方法将特定单元格更新数据。按照下面给出更新表的现有单元格值的步骤。
+        第1步：实例化Configuration类
+        Configuration类增加了HBase的配置文件到它的对象。使用HbaseConfiguration类的create()方法，如下图所示的配置对象。
+        Configuration conf = HbaseConfiguration.create();
+
+        第2步：实例化HTable类
+        有一类叫HTable，实现在HBase中的Table类。此类用于单个HBase的表进行通信。在这个类实例，它接受配置对象和表名作为参数。实例化HTable类，如下图所示。
+        HTable hTable = new HTable(conf, tableName);
+
+        第3步：实例化Put类
+        要将数据插入到HBase表中，使用add()方法和它的变体。这种方法属于Put类，因此实例化Put类。这个类必须以字符串格式的列名插入数据。可以实例化Put类，如下图所示。
+        Put p = new Put(Bytes.toBytes("row1"));
+
+        第4步：更新现有的单元格
+        Put 类的add()方法用于插入数据。它需要表示列族，列限定符（列名称）3字节阵列，并要插入的值。将数据插入HBase表使用add()方法，如下图所示。
+        p.add(Bytes.toBytes("coloumn family "), Bytes.toBytes("column name"),Bytes.toBytes("value"));
+        p.add(Bytes.toBytes("personal"),Bytes.toBytes("city"),Bytes.toBytes("Delih"));
+
+        第5步：保存表数据
+        插入所需的行后，HTable类实例的put()方法添加如下所示保存更改。
+        hTable.put(p);
+
+        第6步：关闭HTable实例
+        创建在HBase的表数据之后，使用close()方法，如下所示关闭HTable实例。
+        hTable.close();
+
+        下面给出的是完整的程序，在一个特定的表更新数据。
+         import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.client.HTable;
+        import org.apache.hadoop.hbase.client.Put;
+        import org.apache.hadoop.hbase.util.Bytes;
+        public class UpdateData{
+
+        public static void main(String[] args) throws IOException {
+
+              // Instantiating Configuration class
+              Configuration config = HBaseConfiguration.create();
+
+              // Instantiating HTable class
+              HTable hTable = new HTable(config, "emp");
+
+              // Instantiating Put class
+              //accepts a row name
+              Put p = new Put(Bytes.toBytes("row1"));
+
+              // Updating a cell value
+              p.add(Bytes.toBytes("personal"),Bytes.toBytes("city"),Bytes.toBytes("Delih"));
+
+              // Saving the put Instance to the HTable.
+              hTable.put(p);
+              System.out.println("data Updated");
+
+              // closing HTable
+              hTable.close();
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac UpdateData.java
+        $java UpdateData
+        下面列出的是输出结果：
+        data Updated
+
+三、读取数据
+    1.命令
+        get命令和HTable类的get()方法用于从HBase表中读取数据。使用 get 命令，可以同时获取一行数据。它的语法如下：
+        get ’<table name>’,’row1’
+        下面的例子说明如何使用get命令。扫描emp表的第一行。
+        hbase(main):012:0> get 'emp', '1'
+           COLUMN                     CELL
+        personal : city timestamp=1417521848375, value=hyderabad
+        personal : name timestamp=1417521785385, value=ramu
+        professional: designation timestamp=1417521885277, value=manager
+        professional: salary timestamp=1417521903862, value=50000
+        4 row(s) in 0.0270 seconds
+
+        读取指定列
+        下面给出的是语法，使用get方法读取指定列。
+        hbase>get 'table name', ‘rowid’, {COLUMN => ‘column family:column name ’}
+        下面给出的示例，是用于读取HBase表中的特定列。
+        hbase(main):015:0> get 'emp', 'row1', {COLUMN=>'personal:name'}
+          COLUMN                CELL
+        personal:name timestamp=1418035791555, value=raju
+        1 row(s) in 0.0080 seconds
+
+    2.使用Java API读取数据
+        从一个HBase表中读取数据，要使用HTable类的get()方法。这种方法需要Get类的一个实例。按照下面从HBase表中检索数据给出的步骤。
+
+        第1步：实例化Configuration类
+        Configuration类增加了HBase的配置文件到它的对象。使用HbaseConfiguration类的create()方法，如下图所示的配置对象。
+        Configuration conf = HbaseConfiguration.create();
+
+        第2步：实例化HTable类
+        有一类叫HTable，实现在HBase中的Table类。此类用于单个HBase的表进行通信。在这个类实例，它接受配置对象和表名作为参数。实例化HTable类，如下图所示。
+        HTable hTable = new HTable(conf, tableName);
+
+        第3步：实例化获得类
+        可以从HBase表使用HTable类的get()方法检索数据。此方法提取从一个给定的行的单元格。它需要一个 Get 类对象作为参数。创建如下图所示。
+        Get get = new Get(toBytes("row1"));
+
+        第4步：读取数据
+        当检索数据，可以通过ID得到一个单列，或得到一组行一组行ID，或者扫描整个表或行的子集。
+        可以使用Get类的add方法变种检索HBase表中的数据。
+        从特定的列族获取指定的列，使用下面的方法。
+        get.addFamily(personal)
+        要得到一个特定的列族的所有列，使用下面的方法。
+        get.addColumn(personal, name)
+
+        第5步：获取结果
+        获取结果通过Get类实例的HTable类的get方法。此方法返回Result类对象，其中保存所请求的结果。下面给出的是get()方法的使用。
+        Result result = table.get(g);
+
+        第6步：从Result实例读值
+        Result 类提供getValue()方法从它的实例读出值。如下图所示，使用它从Result 实例读出值。
+        byte [] value = result.getValue(Bytes.toBytes("personal"),Bytes.toBytes("name"));
+        byte [] value1 = result.getValue(Bytes.toBytes("personal"),Bytes.toBytes("city"));
+
+        下面给出的是从一个HBase表中读取值的完整程序
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.client.Get;
+        import org.apache.hadoop.hbase.client.HTable;
+        import org.apache.hadoop.hbase.client.Result;
+        import org.apache.hadoop.hbase.util.Bytes;
+        public class RetriveData{
+
+           public static void main(String[] args) throws IOException, Exception{
+
+              // Instantiating Configuration class
+              Configuration config = HBaseConfiguration.create();
+
+              // Instantiating HTable class
+              HTable table = new HTable(config, "emp");
+
+              // Instantiating Get class
+              Get g = new Get(Bytes.toBytes("row1"));
+
+              // Reading the data
+              Result result = table.get(g);
+
+              // Reading values from Result class object
+              byte [] value = result.getValue(Bytes.toBytes("personal"),Bytes.toBytes("name"));
+              byte [] value1 = result.getValue(Bytes.toBytes("personal"),Bytes.toBytes("city"));
+
+              // Printing the values
+              String name = Bytes.toString(value);
+              String city = Bytes.toString(value1);
+
+              System.out.println("name: " + name + " city: " + city);
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac RetriveData.java
+        $java RetriveData
+        下面列出的是输出：
+        name: Raju city: Delhi
+
+四、删除数据
+    1.从表删除特定单元格
+        使用 delete 命令，可以在一个表中删除特定单元格。 delete 命令的语法如下：
+        delete ‘<table name>’, ‘<row>’, ‘<column name >’, ‘<time stamp>’
+        下面是一个删除特定单元格和例子。在这里，我们删除salary
+        hbase(main):006:0> delete 'emp', '1', 'personal data:city',
+        1417521848375
+        0 row(s) in 0.0060 seconds
+
+    2.删除表的所有单元格
+        使用“deleteall”命令，可以删除一行中所有单元格。下面给出是 deleteall 命令的语法。
+        deleteall ‘<table name>’, ‘<row>’,
+        这里是使用“deleteall”命令删去 emp 表 row1 的所有单元的一个例子。
+        hbase(main):007:0> deleteall 'emp','1'
+        0 row(s) in 0.0240 seconds
+
+    3.使用Java API删除数据
+        可以从使用HTable类的delete()方法删除HBase表数据。按照下面给出从表中删除数据的步骤。
+        第1步：实例化Configuration类
+        Configuration类增加了HBase配置文件到它的对象。可以创建使用HbaseConfiguration类的create()方法，如下图所示的Configuration 对象。
+        Configuration conf = HbaseConfiguration.create();
+
+        第2步：实例化HTable类
+        有一个类叫HTable，实现在HBase中的Table类。此类用于单个HBase的表进行通信。在这个类实例，它接受配置对象和表名作为参数。实例化HTable类，如下图所示。
+        HTable hTable = new HTable(conf, tableName);
+
+        第3步：实例化Delete 类
+        通过传递将要删除的行的行ID，在字节数组格式实例化Delete类。也可以通过构造时间戳和Rowlock。
+        Delete delete = new Delete(toBytes("row1"));
+
+        第4步：选择删除数据
+        可以使用Delete类的delete方法删除数据。这个类有各种删除方法。选择使用这些方法来删除列或列族。这里显示Delete类方法的用法在下面的例子。
+        delete.deleteColumn(Bytes.toBytes("personal"), Bytes.toBytes("name"));
+        delete.deleteFamily(Bytes.toBytes("professional"));
+
+        第5步：删除数据
+        通过HTable类实例的delete()方法，如下所示删除所选数据。
+        table.delete(delete);
+
+        第6步：关闭HTable实例
+        删除数据后，关闭HTable实例。
+        table.close();
+
+        下面给出的是从HBase表中删除的数据的完整程序。
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.client.Delete;
+        import org.apache.hadoop.hbase.client.HTable;
+        import org.apache.hadoop.hbase.util.Bytes;
+        public class DeleteData {
+
+           public static void main(String[] args) throws IOException {
+
+              // Instantiating Configuration class
+              Configuration conf = HBaseConfiguration.create();
+
+              // Instantiating HTable class
+              HTable table = new HTable(conf, "employee");
+
+              // Instantiating Delete class
+              Delete delete = new Delete(Bytes.toBytes("row1"));
+              delete.deleteColumn(Bytes.toBytes("personal"), Bytes.toBytes("name"));
+              delete.deleteFamily(Bytes.toBytes("professional"));
+
+              // deleting the data
+              table.delete(delete);
+
+              // closing the HTable object
+              table.close();
+              System.out.println("data deleted.....");
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac Deletedata.java
+        $java DeleteData
+        下面列出的是输出：
+        data deleted
+
+五、扫描
+    1.命令
+        scan命令用于查看HTable数据。使用scan命令可以得到表中的数据。它的语法如下：
+        scan ‘<table name>’
+        下面的示例演示了如何使用scan命令从表中读取数据。在这里读取的是emp表。
+        hbase(main):010:0> scan 'emp'
+        ROW                           COLUMN+CELL
+        1 column=personal data:city, timestamp=1417521848375, value=hyderabad
+        1 column=personal data:name, timestamp=1417521785385, value=ramu
+        1 column=professional data:designation, timestamp=1417585277,value=manager
+        1 column=professional data:salary, timestamp=1417521903862, value=50000
+        1 row(s) in 0.0370 seconds
+
+    2.使用Java API扫描
+        使用Java API扫描整个表的数据的完整程序如下：
+        import java.io.IOException;
+        import org.apache.hadoop.conf.Configuration;
+        import org.apache.hadoop.hbase.HBaseConfiguration;
+        import org.apache.hadoop.hbase.util.Bytes;
+        import org.apache.hadoop.hbase.client.HTable;
+        import org.apache.hadoop.hbase.client.Result;
+        import org.apache.hadoop.hbase.client.ResultScanner;
+        import org.apache.hadoop.hbase.client.Scan;
+        public class ScanTable{
+
+           public static void main(String args[]) throws IOException{
+
+              // Instantiating Configuration class
+              Configuration config = HBaseConfiguration.create();
+
+              // Instantiating HTable class
+              HTable table = new HTable(config, "emp");
+
+              // Instantiating the Scan class
+              Scan scan = new Scan();
+
+              // Scanning the required columns
+              scan.addColumn(Bytes.toBytes("personal"), Bytes.toBytes("name"));
+              scan.addColumn(Bytes.toBytes("personal"), Bytes.toBytes("city"));
+
+              // Getting the scan result
+              ResultScanner scanner = table.getScanner(scan);
+
+              // Reading values from scan result
+              for (Result result = scanner.next(); result != null; result = Scanner.next())
+              System.out.println("Found row : " + result);
+
+              //closing the scanner
+              scanner.close();
+           }
+        }
+        编译和执行上述程序如下所示。
+        $javac ScanTable.java
+        $java ScanTable
+        下面列出的是输出：
+        Found row :
+        keyvalues={row1/personal:city/1418275612888/Put/vlen=5/mvcc=0,
+        row1/personal:name/1418035791555/Put/vlen=4/mvcc=0}
+
+六、计数和截断
+    count：
+    可以使用count命令计算表的行数量。它的语法如下：
+    count ‘<table name>’
+    删除第一行后，表emp就只有两行。验证它，如下图所示。
+    hbase(main):023:0> count 'emp'
+    2 row(s) in 0.090 seconds
+    => 2
+
+    truncate：
+    此命令将禁止删除并重新创建一个表。truncate 的语法如下：
+    hbase> truncate 'table name'
+    下面给出是 truncate 命令的例子。在这里，我们已经截断了emp表。
+    hbase(main):011:0> truncate 'emp'
+    Truncating 'one' table (it may take a while):
+       - Disabling table...
+       - Truncating table...
+      0 row(s) in 1.5950 seconds
+    截断表之后，使用scan 命令来验证。会得到表的行数为零。
+    hbase(main):017:0> scan ‘emp’
+    ROW                  COLUMN+CELL
+    0 row(s) in 0.3110 seconds
