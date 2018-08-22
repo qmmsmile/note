@@ -30,5 +30,5 @@ empid       deptid      salary             rank
 SQL脚本：
 select * from (
 SELECT *, Row_Number() OVER (partition by deptid ORDER BY salary desc) rank FROM employee ) p
-where rn<=5
+where rank<=5
 
