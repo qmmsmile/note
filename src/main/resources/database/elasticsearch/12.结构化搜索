@@ -1,0 +1,382 @@
+结构化搜索是指查询包含内部结构的数据。日期，时间，和数字都是结构化的：它们有明确的格式给你执行逻辑操作。一般包括比较数字或日期的范围，或确定两个值哪个大。
+文本也可以被结构化。一包蜡笔有不同的颜色：红色，绿色，蓝色。一篇博客可能被打上分布式和搜索的标签。电子商务产品有商品统一代码（UPCs）或其他有着严格格式的标识。
+通过结构化搜索，你的查询结果始终是是或非；是否应该属于集合。结构化搜索不关心文档的相关性或分数，它只是简单的包含或排除文档。
+这必须是有意义的逻辑，一个数字不能比同一个范围中的其他数字更多。它只能包含在一个范围中——或不在其中。类似的，对于结构化文本，一个值必须相等或不等。这里没有更匹配的概念。
+
+12.1 查询准确值
+
+    （1）查找准确值
+    对于准确值，你需要使用过滤器。过滤器的重要性在于它们非常的快。它们不计算相关性（避过所有计分阶段）而且很容易被缓存。
+    我们今后再来讨论过滤器的性能优势【过滤器缓存】，现在，请先记住尽可能多的使用过滤器。
+
+    （2）用于数字的term过滤器
+    我们下面将介绍term过滤器，首先因为你可能经常会用到它，这个过滤器旨在处理数字，布尔值，日期，和文本。
+    我们来看一下例子，一些产品最初用数字来索引，包含两个字段 price 和 productID：
+    POST /my_store/products/_bulk
+    { "index": { "_id": 1 }}
+    { "price" : 10, "productID" : "XHDK-A-1293-#fJ3" }
+    { "index": { "_id": 2 }}
+    { "price" : 20, "productID" : "KDKE-B-9947-#kL5" }
+    { "index": { "_id": 3 }}
+    { "price" : 30, "productID" : "JODL-X-1937-#pV7" }
+    { "index": { "_id": 4 }}
+    { "price" : 30, "productID" : "QQPX-R-3956-#aD8" }
+    我们的目标是找出特定价格的产品。假如你有关系型数据库背景，可能用SQL来表现这次查询比较熟悉，它看起来像这样：
+    SELECT document FROM   products WHERE  price = 20
+    在 Elasticsearch DSL 中，我们使用term过滤器来实现同样的事。term过滤器会查找我们设定的准确值。term过滤器本身很简单，它接受一个字段名和我们希望查找的值：
+    {
+       "term" : {
+           "price" : 20
+       }
+    }
+    term 过滤器本身并不能起作用。像在【查询 DSL】中介绍的一样，搜索API需要得到一个查询语句，而不是一个过滤器。为了使用term过滤器，我们需要将它包含在一个过滤查询语句中：
+    GET /my_store/products/_search
+    {
+       "query" : {
+           "filtered" : { <1>
+               "query" : {
+                   "match_all" : {} <2>
+               },
+               "filter" : {
+                   "term" : { <3>
+                       "price" : 20
+                   }
+               }
+           }
+       }
+    }
+    <1> filtered 查询同时接受 query 与 filter。
+    <2> match_all 用来匹配所有文档，这是默认行为，所以在以后的例子中我们将省略掉 query 部分。
+    <3> 这是我们上面见过的term过滤器。注意它在filter分句中的位置。
+    执行之后，你将得到预期的搜索结果：只能文档 2 被返回了（因为只有 2 的价格是 20）：
+    "hits" : [
+       {
+           "_index" : "my_store",
+           "_type" :  "products",
+           "_id" :    "2",
+           "_score" : 1.0, <1>
+           "_source" : {
+             "price" :     20,
+             "productID" : "KDKE-B-9947-#kL5"
+           }
+       }
+    ]
+    <1> 过滤器不会执行计分和计算相关性。分值由match_all查询产生，所有文档一视同仁，所有每个结果的分值都是 1
+
+    （3）用于文本的term过滤器
+    像我们在开头提到的，term过滤器可以像匹配数字一样轻松的匹配字符串。让我们通过特定UPC标识码来找出产品，而不是通过价格。如果用SQL来实现，我们可能会使用下面的查询：
+    SELECT product FROM   products WHERE  productID = "XHDK-A-1293-#fJ3"
+    转到查询DSL，我们用term过滤器来构造一个类似的查询：
+    GET /my_store/products/_search
+    {
+       "query" : {
+           "filtered" : {
+               "filter" : {
+                   "term" : {
+                       "productID" : "XHDK-A-1293-#fJ3"
+                   }
+               }
+           }
+       }
+    }
+    有点出乎意料：我们没有得到任何结果值！为什么呢？问题不在于term查询；而在于数据被索引的方式。如果我们使用analyze API，我们可以看到UPC被分解成短小的表征：
+    GET /my_store/_analyze?field=productID
+    XHDK-A-1293-#fJ3
+    {
+     "tokens" : [ {
+       "token" :        "xhdk",
+       "start_offset" : 0,
+       "end_offset" :   4,
+       "type" :         "<ALPHANUM>",
+       "position" :     1
+     }, {
+       "token" :        "a",
+       "start_offset" : 5,
+       "end_offset" :   6,
+       "type" :         "<ALPHANUM>",
+       "position" :     2
+     }, {
+       "token" :        "1293",
+       "start_offset" : 7,
+       "end_offset" :   11,
+       "type" :         "<NUM>",
+       "position" :     3
+     }, {
+       "token" :        "fj3",
+       "start_offset" : 13,
+       "end_offset" :   16,
+       "type" :         "<ALPHANUM>",
+       "position" :     4
+     } ]
+    }
+    这里有一些要点：
+        我们得到了四个分开的标记，而不是一个完整的标记来表示 UPC。
+        所有的字符都被转为了小写。
+        我们失去了连字符和 # 符号。
+    所以当我们用XHDK-A-1293-#fJ3来查找时，得不到任何结果，因为这个标记不在我们的倒排索引中。相反，那里有上面列出的四个标记。
+    显然，在处理唯一标识码，或其他枚举值时，这不是我们想要的结果。
+    为了避免这种情况发生，我们需要通过设置这个字段为not_analyzed来告诉Elasticsearch它包含一个准确值。我们曾在【自定义字段映射】中见过它。
+    为了实现目标，我们要先删除旧索引（因为它包含了错误的映射），并创建一个正确映射的索引：
+    DELETE /my_store <1>
+
+    PUT /my_store <2>
+    {
+       "mappings" : {
+           "products" : {
+               "properties" : {
+                   "productID" : {
+                       "type" : "string",
+                       "index" : "not_analyzed" <3>
+                   }
+               }
+           }
+       }
+
+    }
+    <1> 必须首先删除索引，因为我们不能修改已经存在的映射。
+    <2> 删除后，我们可以用自定义的映射来创建它。
+    <3> 这里我们明确表示不希望 productID 被分析。
+    现在我们可以继续重新索引文档：
+    POST /my_store/products/_bulk
+    { "index": { "_id": 1 }}
+    { "price" : 10, "productID" : "XHDK-A-1293-#fJ3" }
+    { "index": { "_id": 2 }}
+    { "price" : 20, "productID" : "KDKE-B-9947-#kL5" }
+    { "index": { "_id": 3 }}
+    { "price" : 30, "productID" : "JODL-X-1937-#pV7" }
+    { "index": { "_id": 4 }}
+    { "price" : 30, "productID" : "QQPX-R-3956-#aD8" }
+    现在我们的term过滤器将按预期工作。让我们在新索引的数据上再试一次（注意，查询和过滤都没有修改，只是数据被重新映射了）。
+    GET /my_store/products/_search
+    {
+       "query" : {
+           "filtered" : {
+               "filter" : {
+                   "term" : {
+                       "productID" : "XHDK-A-1293-#fJ3"
+                   }
+               }
+           }
+       }
+    }
+    productID字段没有经过分析，term过滤器也没有执行分析，所以这条查询找到了准确匹配的值，如期返回了文档 1。
+
+    （4）内部过滤操作
+    Elasticsearch 在内部会通过一些操作来执行一次过滤：
+        1.查找匹配文档。
+        term过滤器在倒排索引中查找词XHDK-A-1293-#fJ3，然后返回包含那个词的文档列表。在这个例子中，只有文档1有我们想要的词。
+        2.创建字节集
+        然后过滤器将创建一个字节集 —— 一个由1和0组成的数组——描述哪些文档包含这个词。匹配的文档得到1字节，在我们的例子中，字节集将是 [1,0,0,0]
+        3.缓存字节集
+        最后，字节集被储存在内存中，以使我们能用它来跳过步骤1和2。这大大的提升了性能，让过滤变得非常的快。
+    当执行filtered查询时，filter会比query早执行。结果字节集会被传给query来跳过已经被排除的文档。这种过滤器提升性能的方式，查询更少的文档意味着更快的速度。
+
+12.2 组合过滤
+
+    （1）组合过滤
+    前面的两个例子展示了单个过滤器的使用。现实中，你可能需要过滤多个值或字段，例如，想在Elasticsearch中表达这句SQL吗？
+    SELECT product FROM products WHERE  (price = 20 OR productID = "XHDK-A-1293-#fJ3") AND  (price != 30)
+    这些情况下，你需要bool过滤器。这是以其他过滤器作为参数的组合过滤器，将它们结合成多种布尔组合。
+
+    （2）布尔过滤器
+    bool 过滤器由三部分组成：
+    {
+      "bool" : {
+         "must" :     [],
+         "should" :   [],
+         "must_not" : [],
+      }
+    }
+    must：所有分句都必须匹配，与AND相同。
+    must_not：所有分句都必须不匹配，与NOT相同。
+    should：至少有一个分句匹配，与OR相同。
+    这样就行了！假如你需要多个过滤器，将他们放入bool过滤器就行。
+    提示：bool过滤器的每个部分都是可选的（例如，你可以只保留一个must分句），而且每个部分可以包含一到多个过滤器
+    为了复制上面的SQL示例，我们将两个term过滤器放在bool过滤器的should分句下，然后用另一个分句来处理NOT条件：
+    GET /my_store/products/_search
+    {
+      "query" : {
+         "filtered" : { <1>
+            "filter" : {
+               "bool" : {
+                 "should" : [
+                    { "term" : {"price" : 20}}, <2>
+                    { "term" : {"productID" : "XHDK-A-1293-#fJ3"}} <2>
+                 ],
+                 "must_not" : {
+                    "term" : {"price" : 30} <3>
+                 }
+              }
+            }
+         }
+      }
+    }
+    <1> 注意我们仍然需要用 filtered 查询来包裹所有条件。
+    <2> 这两个 term 过滤器是 bool 过滤器的子节点，因为它们被放在 should 分句下，所以至少他们要有一个条件符合。
+    <3> 如果一个产品价值 30，它就会被自动排除掉，因为它匹配了 must_not 分句。
+    我们的搜索结果返回了两个结果，分别满足了bool过滤器中的不同分句：
+    "hits" : [
+       {
+           "_id" :     "1",
+           "_score" :  1.0,
+           "_source" : {
+             "price" :     10,
+             "productID" : "XHDK-A-1293-#fJ3" <1>
+           }
+       },
+       {
+           "_id" :     "2",
+           "_score" :  1.0,
+           "_source" : {
+             "price" :     20, <2>
+             "productID" : "KDKE-B-9947-#kL5"
+           }
+       }
+    ]
+    <1> 匹配 term 过滤器 productID = "XHDK-A-1293-#fJ3"
+    <2> 匹配 term 过滤器 price = 20
+
+    （2）嵌套布尔过滤器
+    虽然bool是一个组合过滤器而且接受子过滤器，需明白它自己仍然只是一个过滤器。这意味着你可以在bool过滤器中嵌套bool过滤器，让你实现更复杂的布尔逻辑。
+    下面先给出 SQL 语句：
+    SELECT document FROM products WHERE productID = "KDKE-B-9947-#kL5" OR ( productID = "JODL-X-1937-#pV7" AND price = 30 )
+    我们可以将它翻译成一对嵌套的 bool 过滤器：
+    GET /my_store/products/_search
+    {
+      "query" : {
+         "filtered" : {
+            "filter" : {
+               "bool" : {
+                 "should" : [
+                   { "term" : {"productID" : "KDKE-B-9947-#kL5"}}, <1>
+                   { "bool" : { <1>
+                     "must" : [
+                       { "term" : {"productID" : "JODL-X-1937-#pV7"}}, <2>
+                       { "term" : {"price" : 30}} <2>
+                     ]
+                   }}
+                 ]
+              }
+            }
+         }
+      }
+    }
+    <1> 因为 term 和 bool 在第一个 should 分句中是平级的，至少需要匹配其中的一个过滤器。
+    <2> must 分句中有两个平级的 term 分句，所以他们俩都需要匹配。
+    结果得到两个文档，分别匹配一个should分句：
+    "hits" : [
+       {
+           "_id" :     "2",
+           "_score" :  1.0,
+           "_source" : {
+             "price" :     20,
+             "productID" : "KDKE-B-9947-#kL5" <1>
+           }
+       },
+       {
+           "_id" :     "3",
+           "_score" :  1.0,
+           "_source" : {
+             "price" :      30, <2>
+             "productID" : "JODL-X-1937-#pV7" <2>
+           }
+       }
+    ]
+    <1> productID 匹配第一个 bool 中的 term 过滤器。
+    <2> 这两个字段匹配嵌套的 bool 中的 term 过滤器。
+    这只是一个简单的例子，但是它展示了该怎样用布尔过滤器来构造复杂的逻辑条件。
+
+12.3 查询多个准确值
+
+    term过滤器在查询单个值时很好用，但是你可能经常需要搜索多个值。比如你想寻找20或30元的文档，该怎么做呢？
+    比起使用多个term过滤器，你可以用一个terms过滤器。terms过滤器是term过滤器的复数版本。
+    它用起来和 term 差不多，我们现在来指定一组数值，而不是单一价格：
+    {
+        "terms" : {
+            "price" : [20, 30]
+        }
+    }
+    像 term 过滤器一样，我们将它放在 filtered 查询中：
+    GET /my_store/products/_search
+    {
+        "query" : {
+            "filtered" : {
+                "filter" : {
+                    "terms" : { <1>
+                        "price" : [20, 30]
+                    }
+                }
+            }
+        }
+    }
+    <1> 这是前面提到的terms过滤器，放置在filtered查询中
+    这条查询将返回第二，第三和第四个文档：
+    "hits" : [
+        {
+            "_id" :    "2",
+            "_score" : 1.0,
+            "_source" : {
+              "price" :     20,
+              "productID" : "KDKE-B-9947-#kL5"
+            }
+        },
+        {
+            "_id" :    "3",
+            "_score" : 1.0,
+            "_source" : {
+              "price" :     30,
+              "productID" : "JODL-X-1937-#pV7"
+            }
+        },
+        {
+            "_id":     "4",
+            "_score":  1.0,
+            "_source": {
+               "price":     30,
+               "productID": "QQPX-R-3956-#aD8"
+            }
+         }
+    ]
+
+12.4 包含，而不是相等
+
+    （1）包含，而不是相等
+    理解term和terms是包含操作，而不是相等操作，这点非常重要。这意味着什么？
+    假如你有一个term过滤器 { "term" : { "tags" : "search" } }，它将匹配下面两个文档：
+    { "tags" : ["search"] }
+    { "tags" : ["search", "open_source"] } <1>
+    <1> 虽然这个文档除了search还有其他短语，它还是被返回了
+    回顾一下term过滤器是怎么工作的：它检查倒排索引中所有具有短语的文档，然后组成一个字节集。在我们简单的示例中，我们有下面的倒排索引：
+    Token	      DocIDs
+    open_source 	2
+    search	        1,2
+    当执行term过滤器来查询search时，它直接在倒排索引中匹配值并找出相关的ID。如你所见，文档1和文档2都包含search，所以他们都作为结果集返回。
+    提示：倒排索引的特性让完全匹配一个字段变得非常困难。你将如何确定一个文档只能包含你请求的短语？你将在索引中找出这个短语，解出所有相关文档ID，然后扫描索引中每一行来确定文档是否包含其他值。
+    由此可见，这将变得非常低效和开销巨大。因此，term和terms是必须包含操作，而不是必须相等。
+
+    （2）完全匹配
+    假如你真的需要完全匹配这种行为，最好是通过添加另一个字段来实现。在这个字段中，你索引原字段包含值的个数。引用上面的两个文档，我们现在包含一个字段来记录标签的个数：
+    { "tags" : ["search"], "tag_count" : 1 }
+    { "tags" : ["search", "open_source"], "tag_count" : 2 }
+    一旦你索引了标签个数，你可以构造一个bool过滤器来限制短语个数：
+    GET /my_index/my_type/_search
+    {
+       "query": {
+           "filtered" : {
+               "filter" : {
+                    "bool" : {
+                       "must" : [
+                           { "term" : { "tags" : "search" } }, <1>
+                           { "term" : { "tag_count" : 1 } } <2>
+                       ]
+                   }
+               }
+           }
+       }
+    }
+    <1> 找出所有包含 search 短语的文档
+    <2> 但是确保文档只有一个标签
+    这将匹配只有一个 search 标签的文档，而不是匹配所有包含了 search 标签的文档。
+
+12.5 范围
+

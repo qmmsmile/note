@@ -1,0 +1,581 @@
+我们已经看到Elasticsearch如何在不需要任何预先计划和设置的情况下，轻松地开发一个新的应用。并且，在你想调整索引和搜索过程来更好地适应你特殊的使用需求前，不会花较长的时间。
+它包含几乎所有的和索引及类型相关的定制选项。在这一章，将介绍管理索引和类型映射的API以及最重要的设置。
+
+10.1 创建删除
+
+    （1）创建索引
+    迄今为止，我们简单的通过添加一个文档的方式创建了一个索引。这个索引使用默认设置，新的属性通过动态映射添加到分类中。
+    现在我们需要对这个过程有更多的控制：我们需要确保索引被创建在适当数量的分片上，在索引数据之前设置好分析器和类型映射。
+    为了达到目标，我们需要手动创建索引，在请求中加入所有设置和类型映射，如下所示：
+    PUT /my_index
+    {
+        "settings": { ... any settings ... },
+        "mappings": {
+            "type_one": { ... any mappings ... },
+            "type_two": { ... any mappings ... },
+            ...
+        }
+    }
+    事实上，你可以通过在 config/elasticsearch.yml 中添加下面的配置来防止自动创建索引。
+    action.auto_create_index: false
+    NOTE：今后，我们将介绍怎样用【索引模板】来自动预先配置索引。这在索引日志数据时尤其有效:你将日志数据索引在一个以日期结尾的索引上，第二天，一个新的配置好的索引会自动创建好。
+
+    （2）删除索引
+    使用以下的请求来删除索引：
+    DELETE /my_index
+    你也可以用下面的方式删除多个索引
+    DELETE /index_one,index_two
+    DELETE /index_*
+    你甚至可以删除所有索引
+    DELETE /_all
+
+10.2 设置索引
+
+    你可以通过很多种方式来自定义索引行为，你可以阅读Index Modules reference documentation，但是：
+    提示: Elasticsearch 提供了优化好的默认配置。除非你明白这些配置的行为和为什么要这么做，请不要修改这些配置。
+    下面是两个最重要的设置：
+        number_of_shards：定义一个索引的主分片个数，默认值是 `5`。这个配置在索引创建后不能修改。
+        number_of_replicas：每个主分片的复制分片个数，默认是 `1`。这个配置可以随时在活跃的索引上修改。
+    例如，我们可以创建只有一个主分片，没有复制分片的小索引。
+    PUT /my_temp_index
+    {
+        "settings": {
+            "number_of_shards" :   1,
+            "number_of_replicas" : 0
+        }
+    }
+    然后，我们可以用 update-index-settings API 动态修改复制分片个数：
+    PUT /my_temp_index/_settings
+    {
+        "number_of_replicas": 1
+    }
+
+10.3 配置分析器
+
+    第三个重要的索引设置是analysis部分，用来配置已存在的分析器或创建自定义分析器来定制化你的索引。
+    在【分析器介绍】中，我们介绍了一些内置的分析器，用于将全文字符串转换为适合搜索的倒排索引。
+    standard 分析器是用于全文字段的默认分析器，对于大部分西方语系来说是一个不错的选择。它考虑了以下几点：
+        standard分词器，在词层级上分割输入的文本。
+        standard标记过滤器，被设计用来整理分词器触发的所有标记（但是目前什么都没做）。
+        lowercase标记过滤器，将所有标记转换为小写。
+        stop标记过滤器，删除所有可能会造成搜索歧义的停用词，如 a，the，and，is。
+    默认情况下，停用词过滤器是被禁用的。如需启用它，你可以通过创建一个基于standard分析器的自定义分析器，并且设置stopwords参数。可以提供一个停用词列表，或者使用一个特定语言的预定停用词列表。
+    在下面的例子中，我们创建了一个新的分析器，叫做es_std，并使用预定义的西班牙语停用词：
+    PUT /spanish_docs
+    {
+     "settings": {
+         "analysis": {
+             "analyzer": {
+                 "es_std": {
+                     "type":      "standard",
+                     "stopwords": "_spanish_"
+                 }
+             }
+         }
+     }
+    }
+    es_std分析器不是全局的，它仅仅存在于我们定义的spanish_docs索引中。为了用analyze API来测试它，我们需要使用特定的索引名。
+    GET /spanish_docs/_analyze?analyzer=es_std
+    El veloz zorro marrón
+    下面简化的结果中显示停用词 El 被正确的删除了：
+    {
+    "tokens" : [
+     { "token" :    "veloz",   "position" : 2 },
+     { "token" :    "zorro",   "position" : 3 },
+     { "token" :    "marrón",  "position" : 4 }
+    ]
+    }
+
+10.4 自定义分析器
+
+    虽然Elasticsearch内置了一系列的分析器，但是真正的强大之处在于定制你自己的分析器。你可以通过在配置文件中组合字符过滤器，分词器和标记过滤器，来满足特定数据的需求。
+    在【分析器介绍】中，我们提到分析器是三个顺序执行的组件的结合（字符过滤器，分词器，标记过滤器）。
+    <1>字符过滤器
+    字符过滤器是让字符串在被分词前变得更加“整洁”。例如，如果我们的文本是HTML格式，它可能会包含一些我们不想被索引的HTML标签，诸如 <p> 或 <div>。
+    我们可以使用html_strip字符过滤器来删除所有的HTML标签，并且将HTML实体转换成对应的Unicode字符，比如将&Aacute; 转成 Á。
+    一个分析器可能包含零到多个字符过滤器。
+    <2>分词器
+    一个分析器必须包含一个分词器。分词器将字符串分割成单独的词（terms）或标记（tokens）。standard分析器使用standard分词器将字符串分割成单独的字词，删除大部分标点符号，但是现存的其他分词器会有不同的行为特征。
+    例如，keyword分词器输出和它接收到的相同的字符串，不做任何分词处理。[whitespace分词器]只通过空格来分割文本。[pattern分词器]可以通过正则表达式来分割文本。
+    <3>标记过滤器
+    分词结果的标记流会根据各自的情况，传递给特定的标记过滤器。
+    标记过滤器可能修改，添加或删除标记。我们已经提过lowercase和stop标记过滤器，但是Elasticsearch中有更多的选择。stemmer标记过滤器将单词转化为他们的根形态（root form）。
+    ascii_folding标记过滤器会删除变音符号，比如从très转为tres。ngram和edge_ngram可以让标记更适合特殊匹配情况或自动完成。
+    在【深入搜索】中，我们将举例介绍如何使用这些分词器和过滤器。但是首先，我们需要阐述一下如何创建一个自定义分析器
+
+    （1）创建自定义分析器
+    与索引设置一样，我们预先配置好es_std分析器，我们可以再analysis字段下配置字符过滤器，分词器和标记过滤器：
+    PUT /my_index
+    {
+        "settings": {
+            "analysis": {
+                "char_filter": { ... custom character filters ... },
+                "tokenizer":   { ...    custom tokenizers     ... },
+                "filter":      { ...   custom token filters   ... },
+                "analyzer":    { ...    custom analyzers      ... }
+            }
+        }
+    }
+    作为例子，我们来配置一个这样的分析器：
+    用html_strip字符过滤器去除所有的HTML标签
+    将 & 替换成 and，使用一个自定义的 mapping 字符过滤器
+    "char_filter": {
+        "&_to_and": {
+            "type":       "mapping",
+            "mappings": [ "&=> and "]
+        }
+    }
+    使用standard分词器分割单词
+    使用lowercase标记过滤器将词转为小写
+    用stop标记过滤器去除一些自定义停用词。
+    "filter": {
+        "my_stopwords": {
+            "type":        "stop",
+            "stopwords": [ "the", "a" ]
+        }
+    }
+    根据以上描述来将预定义好的分词器和过滤器组合成我们的分析器：
+    "analyzer": {
+        "my_analyzer": {
+            "type":           "custom",
+            "char_filter":  [ "html_strip", "&_to_and" ],
+            "tokenizer":      "standard",
+            "filter":       [ "lowercase", "my_stopwords" ]
+        }
+    }
+    用下面的方式可以将以上请求合并成一条：
+    PUT /my_index
+    {
+        "settings": {
+            "analysis": {
+                "char_filter": {
+                    "&_to_and": {
+                        "type":       "mapping",
+                        "mappings": [ "&=> and "]
+                }},
+                "filter": {
+                    "my_stopwords": {
+                        "type":       "stop",
+                        "stopwords": [ "the", "a" ]
+                }},
+                "analyzer": {
+                    "my_analyzer": {
+                        "type":         "custom",
+                        "char_filter":  [ "html_strip", "&_to_and" ],
+                        "tokenizer":    "standard",
+                        "filter":       [ "lowercase", "my_stopwords" ]
+                }}
+    }}}
+    创建索引后，用analyze API来测试新的分析器：
+    GET /my_index/_analyze?analyzer=my_analyzer
+    The quick & brown fox
+    下面的结果证明我们的分析器能正常工作了：
+    {
+      "tokens" : [
+          { "token" :   "quick",    "position" : 2 },
+          { "token" :   "and",      "position" : 3 },
+          { "token" :   "brown",    "position" : 4 },
+          { "token" :   "fox",      "position" : 5 }
+        ]
+    }
+    除非我们告诉Elasticsearch在哪里使用，否则分析器不会起作用。我们可以通过下面的映射将它应用在一个string类型的字段上：
+    PUT /my_index/_mapping/my_type
+    {
+        "properties": {
+            "title": {
+                "type":      "string",
+                "analyzer":  "my_analyzer"
+            }
+        }
+    }
+
+10.5 映射
+
+    （1）类型和映射
+    类型在Elasticsearch中表示一组相似的文档。类型由一个名称（比如user或blogpost）和一个类似数据库表结构的映射组成，描述了文档中可能包含的每个字段的属性，数据类型（比如string,integer或date），和是否这些字段需要被Lucene索引或储存。
+    在【文档】一章中，我们说过类型类似关系型数据库中的表格，一开始你可以这样做类比，但是现在值得更深入阐释一下什么是类型，且在Lucene中是怎么实现的。
+
+    （2）Lucene如何处理文档
+    Lucene中，一个文档由一组简单的键值对组成，一个字段至少需要有一个值，但是任何字段都可以有多个值。类似的，一个单独的字符串可能在分析过程中被转换成多个值。Lucene不关心这些值是字符串，数字或日期，所有的值都被当成不透明字节
+    当我们在Lucene中索引一个文档时，每个字段的值都被加到相关字段的倒排索引中。你也可以选择将原始数据储存起来以备今后取回。
+
+    （3）类型是怎么实现的
+    Elasticsearch类型是在这个简单基础上实现的。一个索引可能包含多个类型，每个类型有各自的映射和文档，保存在同一个索引中。
+    因为Lucene没有文档类型的概念，每个文档的类型名被储存在一个叫_type的元数据字段上。当我们搜索一种特殊类型的文档时，Elasticsearch简单的通过_type字段来过滤出这些文档。
+    Lucene同样没有映射的概念。映射是Elasticsearch将复杂JSON文档映射成Lucene需要的扁平化数据的方式。
+    例如，user类型中name字段的映射声明这个字段是一个string类型，在被加入倒排索引之前，它的数据需要通过whitespace分析器来分析。
+    "name": {
+        "type":     "string",
+        "analyzer": "whitespace"
+    }
+
+    （4）预防类型陷阱
+    事实上不同类型的文档可以被加到同一个索引里带来了一些预想不到的困难。
+    想象一下我们的索引中有两种类型：blog_en表示英语版的博客，blog_es表示西班牙语版的博客。两种类型都有title字段，但是其中一种类型使用english分析器，另一种使用spanish分析器。
+    使用下面的查询就会遇到问题：
+    GET /_search
+    {
+        "query": {
+            "match": {
+                "title": "The quick brown fox"
+            }
+        }
+    }
+    我们在两种类型中搜索title字段，首先需要分析查询语句，但是应该使用哪种分析器呢，spanish还是english？Elasticsearch会采用第一个被找到的title字段使用的分析器，这对于这个字段的文档来说是正确的，但对另一个来说却是错误的。
+    我们可以通过给字段取不同的名字来避免这种错误——比如，用title_en和title_es。或者在查询中明确包含各自的类型名。
+    GET /_search
+    {
+        "query": {
+            "multi_match": { <1>
+                "query":    "The quick brown fox",
+                "fields": [ "blog_en.title", "blog_es.title" ]
+            }
+        }
+    }
+    <1> multi_match查询在多个字段上执行match查询并一起返回结果。
+    新的查询中english分析器用于blog_en.title字段，spanish分析器用于blog_es.title字段，然后通过综合得分组合两种字段的结果。
+    这种办法对具有相同数据类型的字段有帮助，但是想象一下如果你将下面两个文档加入同一个索引，会发生什么：
+    类型: user
+     { "login": "john_smith" }
+    类型: event
+     { "login": "2014-06-01" }
+    Lucene不在乎一个字段是字符串而另一个字段是日期，它会一视同仁的索引这两个字段。
+    然而，假如我们试图排序event.login字段，Elasticsearch需要将login字段的值加载到内存中。像我们在【字段数据介绍】中提到的，它将任意文档的值加入索引而不管它们的类型。
+    它会尝试加载这些值为字符串或日期，取决于它遇到的第一个login字段。这可能会导致预想不到的结果或者以失败告终。
+    提示：为了保证你不会遇到这些冲突，建议在同一个索引的每一个类型中，确保用同样的方式映射同名的字段
+
+10.6 根对象
+    （1）根对象
+    映射的最高一层被称为根对象，它可能包含下面几项：
+    一个properties节点，列出了文档中可能包含的每个字段的映射
+    多个元数据字段，每一个都以下划线开头，例如_type,_id和_source
+    设置项，控制如何动态处理新的字段，例如analyzer,dynamic_date_formats和dynamic_templates。
+    其他设置，可以同时应用在根对象和其他object类型的字段上，例如enabled,dynamic和include_in_all
+
+    （2）属性
+    我们已经在【核心字段】和【复合核心字段】章节中介绍过文档字段和属性的三个最重要的设置：
+    type：字段的数据类型，例如 string 和 date
+    index：字段是否应当被当成全文来搜索（analyzed），或被当成一个准确的值（not_analyzed），还是完全不可被搜索（no）
+    analyzer：确定在索引和或搜索时全文字段使用的分析器。
+    我们将在下面的章节中介绍其他字段，例如ip,geo_point和geo_shape
+
+10.7 元数据：_source 字段
+
+    默认情况下，Elasticsearch用JSON字符串来表示文档主体保存在_source字段中。像其他保存的字段一样,_source字段也会在写入硬盘前压缩。
+    这几乎始终是需要的功能，因为：
+        搜索结果中能得到完整的文档——不需要额外去别的数据源中查询文档
+        如果缺少_source字段，部分更新请求不会起作用
+        当你的映射有变化，而且你需要重新索引数据时，你可以直接在Elasticsearch中操作而不需要重新从别的数据源中取回数据。
+        你可以从_source中通过get或search请求取回部分字段，而不是整个文档。
+        这样更容易排查错误，因为你可以准确的看到每个文档中包含的内容，而不是只能从一堆ID中猜测他们的内容。
+    即便如此，存储_source字段还是要占用硬盘空间的。假如上面的理由对你来说不重要，你可以用下面的映射禁用_source字段：
+    PUT /my_index
+    {
+        "mappings": {
+            "my_type": {
+                "_source": {
+                    "enabled":  false
+                }
+            }
+        }
+    }
+    在搜索请求中你可以通过限定_source字段来请求指定字段：
+    GET /_search
+    {
+        "query":   { "match_all": {}},
+        "_source": [ "title", "created" ]
+    }
+    这些字段会从_source中提取出来，而不是返回整个_source字段。
+
+    储存字段
+    除了索引字段的值，你也可以选择储存字段的原始值以备日后取回。使用Lucene做后端的用户用储存字段来选择搜索结果的返回值，事实上，_source字段就是一个储存字段。
+    在Elasticsearch中，单独设置储存字段不是一个好做法。完整的文档已经被保存在_source字段中。通常最好的办法会是使用_source参数来过滤你需要的字段。
+
+10.8 元数据：_all 字段
+
+    在【简单搜索】中，我们介绍了_all字段：一个所有其他字段值的特殊字符串字段。query_string在没有指定字段时默认用_all字段查询。
+
+    _all字段在新应用的探索阶段比较管用，当你还不清楚最终文档的结构时，可以将任何查询用于这个字段，就有机会得到你想要的文档：
+    GET /_search
+    {
+        "match": {
+            "_all": "john smith marketing"
+        }
+    }
+    随着你应用的发展，搜索需求会变得更加精准。你会越来越少的使用_all字段。_all是一种简单粗暴的搜索方式。通过查询独立的字段，你能更灵活，强大和精准的控制搜索结果，提高相关性。
+    提示:【相关性算法】考虑的一个最重要的原则是字段的长度：字段越短，就越重要。在较短的title字段中的短语会比较长的content字段中的短语显得更重要。而字段间的这种差异在_all字段中就不会出现
+
+    如果你决定不再使用_all字段，你可以通过下面的映射禁用它：
+    PUT /my_index/_mapping/my_type
+    {
+        "my_type": {
+            "_all": { "enabled": false }
+        }
+    }
+    通过 include_in_all 选项可以控制字段是否要被包含在_all字段中，默认值是true。在一个对象上设置include_in_all可以修改这个对象所有字段的默认行为。
+    你可能想要保留_all字段来查询所有特定的全文字段，例如 title, overview, summary 和 tags。相对于完全禁用_all字段，你可以先默认禁用include_in_all选项，而选定字段上启用include_in_all。
+    PUT /my_index/my_type/_mapping
+    {
+        "my_type": {
+            "include_in_all": false,
+            "properties": {
+                "title": {
+                    "type":  "string",
+                    "include_in_all": true
+                },
+                ...
+            }
+        }
+    }
+    谨记 _all 字段仅仅是一个经过分析的string字段。它使用默认的分析器来分析它的值，而不管这值本来所在的字段指定的分析器。而且像所有string类型字段一样，你可以配置_all字段使用的分析器：
+    PUT /my_index/my_type/_mapping
+    {
+        "my_type": {
+            "_all": { "analyzer": "whitespace" }
+        }
+    }
+
+10.9 元数据中的ID字段
+
+    文档唯一标识由四个元数据字段组成：
+        _id：文档的字符串ID
+        _type：文档的类型名
+        _index：文档所在的索引
+        _uid：_type和_id连接成的type#id
+
+    默认情况下，_uid是被保存（可取回）和索引（可搜索）的。_type字段被索引但是没有保存，_id和_index字段则既没有索引也没有储存，它们并不是真实存在的。
+    尽管如此，你仍然可以像真实字段一样查询_id字段。Elasticsearch使用_uid字段来追溯_id。虽然你可以修改这些字段的index和store设置，但是基本上不需要这么做。
+    _id字段有一个你可能用得到的设置：path设置告诉Elasticsearch它需要从文档本身的哪个字段中生成 _id
+    PUT /my_index
+    {
+        "mappings": {
+            "my_type": {
+                "_id": {
+                    "path": "doc_id" <1>
+                },
+                "properties": {
+                    "doc_id": {
+                        "type":   "string",
+                        "index":  "not_analyzed"
+                    }
+                }
+            }
+        }
+    }
+    <1> 从doc_id字段生成_id
+    然后，当你索引一个文档时：
+    POST /my_index/my_type
+    {
+        "doc_id": "123"
+    }
+    _id值由文档主体的doc_id字段生成。
+    {
+        "_index":   "my_index",
+        "_type":    "my_type",
+        "_id":      "123", <1>
+        "_version": 1,
+        "created":  true
+    }
+    <1> _id 正确的生成了。
+    警告：虽然这样很方便，但是注意它对bulk请求（见【bulk 格式】）有个轻微的性能影响。处理请求的节点将不能仅靠解析元数据行来决定将请求分配给哪一个分片，而需要解析整个文档主体。
+
+10.10 动态映射
+
+    当Elasticsearch处理一个位置的字段时，它通过【动态映射】来确定字段的数据类型且自动将该字段加到类型映射中。
+    有时这是理想的行为，有时却不是。或许你不知道今后会有哪些字段加到文档中，但是你希望它们能自动被索引。或许你仅仅想忽略它们。特别是当你使用Elasticsearch作为主数据源时，你希望未知字段能抛出一个异常来警示你。
+    幸运的是，你可以通过dynamic设置来控制这些行为，它接受下面几个选项：
+    true：自动添加字段（默认）
+    false：忽略字段
+    strict：当遇到未知字段时抛出异常
+    dynamic设置可以用在根对象或任何object对象上。你可以将dynamic默认设置为strict，而在特定内部对象上启用它：
+    PUT /my_index
+    {
+        "mappings": {
+            "my_type": {
+                "dynamic": "strict", <1>
+                "properties": {
+                    "title":  { "type": "string"},
+                    "stash":  {
+                        "type": "object",
+                        "dynamic":  true <2>
+                    }
+                }
+            }
+        }
+    }
+    <1> 当遇到未知字段时，my_type对象将会抛出异常
+    <2> stash对象会自动创建字段
+    通过这个映射，你可以添加一个新的可搜索字段到stash对象中：
+    PUT /my_index/my_type/1
+    {
+        "title": "This doc adds a new field",
+        "stash": { "new_field": "Success!" }
+    }
+    但是在顶层做同样的操作则会失败：
+    PUT /my_index/my_type/1
+    {
+        "title": "This throws a StrictDynamicMappingException",
+        "new_field": "Fail!"
+    }
+    备注：将dynamic设置成false完全不会修改_source字段的内容。_source将仍旧保持你索引时的完整JSON文档。然而，没有被添加到映射的未知字段将不可被搜索。
+
+10.11 自定义动态映射
+
+    （1）自定义动态索引
+    如果你想在运行时的增加新的字段，你可能会开启动态索引。虽然有时动态映射的规则显得不那么智能，幸运的是我们可以通过设置来自定义这些规则。
+
+    （2）日期检测
+    当Elasticsearch遇到一个新的字符串字段时，它会检测这个字段是否包含一个可识别的日期，比如2014-01-01。如果它看起来像一个日期，这个字段会被作为date类型添加，否则，它会被作为string类型添加。
+    有些时候这个规则可能导致一些问题。想象你有一个文档长这样：
+    { "note": "2014-01-01" }
+    假设这是第一次见到note字段，它会被添加为date字段，但是如果下一个文档像这样：
+    { "note": "Logged out" }
+    这显然不是一个日期，但为时已晚。这个字段已经被添加为日期类型，这个不合法的日期将引发异常。
+    日期检测可以通过在根对象上设置date_detection为false来关闭：
+    PUT /my_index
+    {
+        "mappings": {
+            "my_type": {
+                "date_detection": false
+            }
+        }
+    }
+    使用这个映射，字符串将始终是string 类型。假如你需要一个 date 字段，你得手动添加它。
+    提示：Elasticsearch 判断字符串为日期的规则可以通过dynamic_date_formats配置来修改。
+
+    （3）动态模板
+    使用dynamic_templates，你可以完全控制新字段的映射，你设置可以通过字段名或数据类型应用一个完全不同的映射。
+    每个模板都有一个名字用于描述这个模板的用途，一个mapping字段用于指明这个映射怎么使用，和至少一个参数（例如 match）来定义这个模板适用于哪个字段。
+    模板按照顺序来检测，第一个匹配的模板会被启用。例如，我们给string类型字段定义两个模板：
+    es: 字段名以_es结尾需要使用spanish分析器。
+    en: 所有其他字段使用english分析器。
+    我们将es模板放在第一位，因为它比匹配所有字符串的en模板更特殊一点
+    PUT /my_index
+    {
+        "mappings": {
+            "my_type": {
+                "dynamic_templates": [
+                    { "es": {
+                          "match":              "*_es", <1>
+                          "match_mapping_type": "string",
+                          "mapping": {
+                              "type":           "string",
+                              "analyzer":       "spanish"
+                          }
+                    }},
+                    { "en": {
+                          "match":              "*", <2>
+                          "match_mapping_type": "string",
+                          "mapping": {
+                              "type":           "string",
+                              "analyzer":       "english"
+                          }
+                    }}
+                ]
+    }}}
+    <1> 匹配字段名以 _es 结尾的字段.
+    <2> 匹配所有字符串类型字段。
+    match_mapping_type允许你限制模板只能使用在特定的类型上，就像由标准动态映射规则检测的一样，（例如 strong 和 long）
+    match参数只匹配字段名，path_match参数则匹配字段在一个对象中的完整路径，所以 address.*.name 规则将匹配一个这样的字段：
+    {
+        "address": {
+            "city": {
+                "name": "New York"
+            }
+        }
+    }
+    unmatch和path_unmatch规则将用于排除未被匹配的字段。
+
+10.12 默认映射
+
+    通常，一个索引中的所有类型具有共享的字段和设置。用_default_映射来指定公用设置会更加方便，而不是每次创建新的类型时重复操作。
+    _default映射像新类型的模板。所有在_default_映射之后的类型将包含所有的默认设置，除非在自己的类型映射中明确覆盖这些配置。
+    例如，我们可以使用_default_映射对所有类型禁用_all字段，而只在blog字段上开启它：
+    PUT /my_index
+    {
+        "mappings": {
+            "_default_": {
+                "_all": { "enabled":  false }
+            },
+            "blog": {
+                "_all": { "enabled":  true  }
+            }
+        }
+    }
+    _default_ 映射也是定义索引级别的动态模板的好地方。
+
+10.13 重新索引数据
+
+    虽然你可以给索引添加新的类型，或给类型添加新的字段，但是你不能添加新的分析器或修改已有字段。假如你这样做，已被索引的数据会变得不正确而你的搜索也不会正常工作。
+    修改在已存在的数据最简单的方法是重新索引：创建一个新配置好的索引，然后将所有的文档从旧的索引复制到新的上。
+    _source字段的一个最大的好处是你已经在Elasticsearch中有了完整的文档，你不再需要从数据库中重建你的索引，这样通常会比较慢。
+    为了更高效的索引旧索引中的文档，使用【scan-scoll】来批量读取旧索引的文档，然后将通过【bulk API】来将它们推送给新的索引。
+    批量重新索引：
+    你可以在同一时间执行多个重新索引的任务，但是你显然不愿意它们的结果有重叠。所以，可以将重建大索引的任务通过日期或时间戳字段拆分成较小的任务：
+    GET /old_index/_search?search_type=scan&scroll=1m
+    {
+        "query": {
+            "range": {
+                "date": {
+                    "gte":  "2014-01-01",
+                    "lt":   "2014-02-01"
+                }
+            }
+        },
+        "size":  1000
+    }
+    假如你继续在旧索引上做修改，你可能想确保新增的文档被加到了新的索引中。这可以通过重新运行重建索引程序来完成，但是记得只要过滤出上次执行后新增的文档就行了。
+
+10.14 别名
+
+    前面提到的重新索引过程中的问题是必须更新你的应用，来使用另一个索引名。索引别名正是用来解决这个问题的！
+    索引别名就像一个快捷方式或软连接，可以指向一个或多个索引，也可以给任何需要索引名的 API 使用。别名带给我们极大的灵活性，允许我们做到：
+        在一个运行的集群上无缝的从一个索引切换到另一个
+        给多个索引分类（例如，last_three_months）
+        给索引的一个子集创建视图
+    我们以后会讨论更多别名的使用场景。现在我们将介绍用它们怎么在零停机时间内从旧的索引切换到新的索引。
+    这里有两种管理别名的途径：_alias用于单个操作，_aliases用于原子化多个操作。
+    在这一章中，我们假设你的应用采用一个叫my_index的索引。而事实上，my_index是一个指向当前真实索引的别名。真实的索引名将包含一个版本号：my_index_v1, my_index_v2 等等。
+    开始，我们创建一个索引 my_index_v1，然后将别名my_index指向它：
+    PUT /my_index_v1 <1>
+    PUT /my_index_v1/_alias/my_index <2>
+    <1> 创建索引my_index_v1。
+    <2> 将别名my_index指向my_index_v1。
+    你可以检测这个别名指向哪个索引：
+    GET /*/_alias/my_index
+    或哪些别名指向这个索引：
+    GET /my_index_v1/_alias/*
+    两者都将返回下列值：
+    {
+        "my_index_v1" : {
+            "aliases" : {
+                "my_index" : { }
+            }
+        }
+    }
+    然后，我们决定修改索引中一个字段的映射。当然我们不能修改现存的映射，索引我们需要重新索引数据。首先，我们创建有新的映射的索引my_index_v2。
+    PUT /my_index_v2
+    {
+        "mappings": {
+            "my_type": {
+                "properties": {
+                    "tags": {
+                        "type":   "string",
+                        "index":  "not_analyzed"
+                    }
+                }
+            }
+        }
+    }
+    然后我们将数据从my_index_v1迁移到my_index_v2，下面的过程在【重新索引】中描述过了。一旦我们认为数据已经被正确的索引了，我们就将别名指向新的索引。
+    别名可以指向多个索引，所以我们需要在新索引中添加别名的同时从旧索引中删除它。这个操作需要原子化，所以我们需要用_aliases操作：
+    POST /_aliases
+    {
+        "actions": [
+            { "remove": { "index": "my_index_v1", "alias": "my_index" }},
+            { "add":    { "index": "my_index_v2", "alias": "my_index" }}
+        ]
+    }
+    这样，你的应用就从旧索引迁移到了新的，而没有停机时间。
+    提示：即使你认为现在的索引设计已经是完美的了，当你的应用在生产环境使用时，还是有可能在今后有一些改变的。
+    所以请做好准备：在应用中使用别名而不是索引。然后你就可以在任何时候重建索引。别名的开销很小，应当广泛使用。
